@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PrimeTrust Bank</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    /* GLOBAL STYLES */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f6f8;
+    }
+    h2, h3, h4 { color: #0a2a66; margin: 0 0 10px 0; }
+    input, button {
+      padding: 12px;
+      margin: 8px 0;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 6px;
+    }
+    button {
+      background: #0a2a66;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .box {
+      background: white;
+      padding: 20px;
+      margin: 20px auto;
+      border-radius: 12px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .admin { border: 2px solid #0a2a66; }
+
+    /* LANDING PAGE */
+    #landingPage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 70vh;
+      background-image: url('https://images.unsplash.com/photo-1573164574390-05b4b9ff0d2e?auto=format&fit=crop&w=800&q=80');
+      background-size: cover;
+      background-position: center;
+      color: white;
+      border-radius: 12px;
+      margin: 20px auto;
+      padding: 40px 20px;
+    }
+    #landingPage h2 { font-size: 2em; margin-bottom: 10px; text-shadow: 1px 1px 5px rgba(0,0,0,0.7); }
+    #landingPage p { font-size: 1.2em; margin-bottom: 20px; text-shadow: 1px 1px 4px rgba(0,0,0,0.6); }
+    #landingPage button {
+      background-color: #ffbf00;
+      color: #0a2a66;
+      padding: 12px 30px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
+      width: auto;
+    }
+    #landingPage img { margin-bottom: 20px; max-width: 120px; }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      #landingPage h2 { font-size: 1.6em; }
+      #landingPage p { font-size: 1em; }
+      .box { width: 95%; margin: 10px auto; padding: 15px; }
+      input, button { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LANDING PAGE -->
+<div class="box" id="landingPage">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Bank_icon.svg/1200px-Bank_icon.svg.png" alt="PrimeTrust Logo" width="100" />
+  <h2>Welcome to PrimeTrust Bank</h2>
+  <p>Your trusted digital bank. Manage your funds safely and securely.</p>
+  <button onclick="showAuth()">Login / Register</button>
+</div>
+
+<!-- AUTH -->
+<div class="box" id="authBox" style="display:none">
+  <h3>Login / Register</h3>
+  <input id="email" placeholder="Email (must be valid)" />
+  <input id="password" type="password" placeholder="Password" />
+  <button onclick="login()">Login</button>
+  <button onclick="register()">Register</button>
+</div>
+
+<!-- USER DASHBOARD -->
+<div class="box" id="userPanel" style="display:none">
+  <h3>Your Account</h3>
+  <p id="balance">Balance: --</p>
+
+  <h4>Transfer Funds</h4>
+  <input id="toUser" placeholder="Receiver username" />
+  <input id="amount" type="number" placeholder="Amount" />
+  <button onclick="transfer()">Transfer</button>
+
+  <button onclick="logout()">Logout</button>
+</div>
+
+<!-- ADMIN DASHBOARD -->
+<div class="box admin" id="adminPanel" style="display:none">
+  <h3>Banker Dashboard</h3>
+  <button onclick="loadAllAccounts()">View All Accounts</button>
+  <pre id="accountsData"></pre>
+</div>
+
+<script>
+/* -------------------- */
+/* SUPABASE CONNECTION */
+const SUPABASE_URL = https://beahjjbypfpfqgnelzro.supabase.co;
+const SUPABASE_ANON_KEY = sb_publishable_jJvSxgyG3LvdruFASfuHpw_jS7cpa_a;
+
+const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* -------------------- */
+/* LANDING PAGE -> AUTH */
+function showAuth() {
+  document.getElementById("landingPage").style.display = "none";
+  document.getElementById("authBox").style.display = "block";
+}
+
+/* -------------------- */
+/* AUTH FUNCTIONS */
+async function register() {
+  const { error, data } = await supabase.auth.signUp({
+    email: email.value,
+    password: password.value
+  });
+  if (error) return alert(error.message);
+
+  await supabase.from("accounts").insert({
+    id: data.user.id,
+    balance: 0.00,
+    role: "user"
+  });
+
+  alert("Registered successfully. Login now.");
+}
+
+async function login() {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.value,
+    password: password.value
+  });
+  if (error) return alert(error.message);
+
+  document.getElementById("authBox").style.display = "none";
+  document.getElementById("userPanel").style.display = "block";
+
+  await loadBalance();
+  await checkAdmin();
+}
+
+async function logout() {
+  await supabase.auth.signOut();
+  location.reload();
+}
+
+/* -------------------- */
+/* USER FUNCTIONS */
+async function loadBalance() {
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user) return;
+
+  const { data } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("id", user.id)
+    .single();
+
+  if (data) {
+    document.getElementById("balance").innerText =
+      "Balance: ₦" + Number(data.balance).toFixed(2);
+  }
+}
+
+async function transfer() {
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user) return alert("Login required");
+
+  if (!toUser.value || !amount.value) {
+    return alert("Fill all fields");
+  }
+
+  const { error } = await supabase.from("transactions").insert({
+    sender: user.email,
+    receiver: toUser.value,
+    amount: Number(amount.value),
+    type: "transfer"
+  });
+
+  alert(error ? error.message : "Transfer submitted");
+}
+
+/* -------------------- */
+/* ADMIN CHECK */
+async function checkAdmin() {
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user) return;
+
+  const { data } = await supabase
+    .from("accounts")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (data && data.role === "admin") {
+    document.getElementById("adminPanel").style.display = "block";
+  }
+}
+
+/* -------------------- */
+/* ADMIN FUNCTIONS */
+async function loadAllAccounts() {
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("*");
+
+  if (error) {
+    accountsData.innerText = error.message;
+  } else {
+    accountsData.innerText = JSON.stringify(data, null, 2);
+  }
+}
+</script>
+
+</body>
+</html>
